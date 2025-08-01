@@ -1,5 +1,10 @@
 import streamlit as st
 import json
+from data_generator import generate_synthetic_data
+from pyspark.sql import SparkSession
+
+# Initialize Spark session
+spark = SparkSession.builder.getOrCreate()
 
 st.title("Synthetic Data Generator (Notebook-based)")
 
@@ -17,13 +22,15 @@ for i in range(num_columns):
     columns.append({"name": col_name, "type": col_type})
 
 if st.button("Generate Data"):
-    params = {
-        "catalog": catalog,
-        "schema": schema,
-        "table_name": table_name,
-        "columns": json.dumps(columns),
-        "row_count": row_count
-    }
-
-    result = dbutils.notebook.run("/Workspace/Users/kevin.ippen@databricks.com/synthetic-data-generator/notebooks/1_data_generator_notebook", 600, params)
-    st.success(f"Synthetic data written to {result}")
+    try:
+        result = generate_synthetic_data(
+            spark=spark,
+            catalog=catalog,
+            schema=schema,
+            table_name=table_name,
+            columns=columns,
+            row_count=int(row_count)
+        )
+        st.success(f"Synthetic data written to {result}")
+    except Exception as e:
+        st.error(f"Error generating data: {str(e)}")

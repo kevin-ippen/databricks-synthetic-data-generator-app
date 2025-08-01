@@ -1,0 +1,14 @@
+# Core UI framework for the app
+streamlit==1.36.0
+
+# Databricks SDK (for workspace and notebook orchestration if needed)
+databricks-sdk==0.29.0
+
+# Faker for synthetic data preview or local column generation
+faker==19.6.2
+
+# Data manipulation in the app
+pandas==2.2.2
+
+# YAML parsing (if you use config.yaml for defaults/templates)
+pyyaml==6.0.2

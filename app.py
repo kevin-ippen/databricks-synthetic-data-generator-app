@@ -1,36 +1,33 @@
 import streamlit as st
-import json
-from data_generator import generate_synthetic_data
-from pyspark.sql import SparkSession
 
-# Initialize Spark session
-spark = SparkSession.builder.getOrCreate()
+st.title("🔍 Minimal Test App")
+st.write("If you see this, Streamlit is working!")
 
-st.title("Synthetic Data Generator (Notebook-based)")
+# Test basic imports one by one
+try:
+    import json
+    st.write("✅ json imported")
+except Exception as e:
+    st.error(f"❌ json failed: {e}")
 
-catalog = st.text_input("Unity Catalog", "sandbox_catalog")
-schema = st.text_input("Schema", "synthetic_data")
-table_name = st.text_input("Table Name", "synthetic_table")
-row_count = st.number_input("Row Count", value=1000)
+try:
+    from datetime import datetime, timedelta
+    st.write("✅ datetime imported")
+except Exception as e:
+    st.error(f"❌ datetime failed: {e}")
 
-st.header("Define Columns")
-num_columns = st.number_input("Number of Columns", min_value=1, value=3)
-columns = []
-for i in range(num_columns):
-    col_name = st.text_input(f"Column {i+1} Name", f"col_{i+1}")
-    col_type = st.selectbox(f"Column {i+1} Type", ["string", "integer", "float", "date", "timestamp"], key=f"type_{i}")
-    columns.append({"name": col_name, "type": col_type})
+try:
+    import random
+    st.write("✅ random imported")
+except Exception as e:
+    st.error(f"❌ random failed: {e}")
 
-if st.button("Generate Data"):
-    try:
-        result = generate_synthetic_data(
-            spark=spark,
-            catalog=catalog,
-            schema=schema,
-            table_name=table_name,
-            columns=columns,
-            row_count=int(row_count)
-        )
-        st.success(f"Synthetic data written to {result}")
-    except Exception as e:
-        st.error(f"Error generating data: {str(e)}")
+try:
+    from faker import Faker
+    st.write("✅ faker imported")
+except Exception as e:
+    st.error(f"❌ faker failed: {e}")
+
+# DON'T test Spark or PySpark yet - that's likely the issue
+
+st.write("✅ Basic app is working!")

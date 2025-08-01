@@ -1,6 +1,6 @@
 import streamlit as st
 import json
-from data_generator import generate_synthetic_data
+from utils.data_generator import generate_synthetic_data
 from pyspark.sql import SparkSession
 
 # Initialize Spark session

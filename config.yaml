@@ -1,0 +1,7 @@
+name: synthetic-data-generator
+description: "Streamlit app to configure and generate synthetic data written to Unity Catalog"
+entrypoint:
+  command: streamlit run app.py --server.address 0.0.0.0 --server.port 8000
+env:
+  - name: PYTHONPATH
+    value: .

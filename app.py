@@ -3,7 +3,12 @@ import json
 import pandas as pd
 from databricks import sql
 from databricks.sdk.core import Config
-from data_generator import generate_synthetic_dataframe, write_to_unity_catalog
+from faker import Faker
+from datetime import datetime, timedelta
+import random
+
+# Initialize Faker
+fake = Faker()
 
 # Initialize Databricks config
 cfg = Config()
@@ -15,6 +20,34 @@ def get_connection(http_path):
         http_path=http_path,
         credentials_provider=lambda: cfg.authenticate,
     )
+
+def generate_synthetic_dataframe(columns, row_count):
+    """Generate pandas DataFrame with synthetic data"""
+    data = []
+    for i in range(row_count):
+        row = {}
+        for col in columns:
+            if col["type"] == "string":
+                row[col["name"]] = fake.word()
+            elif col["type"] == "integer":
+                row[col["name"]] = random.randint(0, 10000)
+            elif col["type"] == "float":
+                row[col["name"]] = round(random.uniform(0, 10000), 2)
+            elif col["type"] == "date":
+                row[col["name"]] = fake.date_between(start_date="-1y", end_date="today")
+            elif col["type"] == "timestamp":
+                row[col["name"]] = datetime.now() - timedelta(days=random.randint(0, 365))
+            else:
+                row[col["name"]] = fake.word()
+        data.append(row)
+    return pd.DataFrame(data)
+
+def write_to_unity_catalog(table_name: str, df: pd.DataFrame, conn):
+    """Write DataFrame to Unity Catalog using SQL"""
+    with conn.cursor() as cursor:
+        rows = list(df.itertuples(index=False))
+        values = ",".join([f"({','.join(map(repr, row))})" for row in rows])
+        cursor.execute(f"INSERT OVERWRITE {table_name} VALUES {values}")
 
 st.title("Synthetic Data Generator (SQL-based)")
 

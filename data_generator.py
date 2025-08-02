@@ -118,9 +118,18 @@ def generate_synthetic_dataframe_advanced(columns, row_count):
 def write_to_unity_catalog(table_name: str, df: pd.DataFrame, conn):
     """Write DataFrame to Unity Catalog using SQL"""
     with conn.cursor() as cursor:
-        rows = list(df.itertuples(index=False))
-        values = ",".join([f"({','.join(map(repr, row))})" for row in rows])
-        cursor.execute(f"INSERT OVERWRITE {table_name} VALUES {values}")
+        if not df.empty:
+            # Fill NaN values with empty strings or zeros
+            df_filled = df.fillna({
+                col: "" if df[col].dtype == 'object' else 0 
+                for col in df.columns
+            })
+            
+            rows = list(df_filled.itertuples(index=False))
+            values = ",".join([f"({','.join(map(repr, row))})" for row in rows])
+            cursor.execute(f"CREATE OR REPLACE TABLE {table_name} AS VALUES {values}")
+        else:
+            st.error("No data to write")
 
 
 # Streamlit UI

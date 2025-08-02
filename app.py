@@ -118,30 +118,14 @@ def write_to_unity_catalog(table_name: str, df: pd.DataFrame, conn):
     """Write DataFrame to Unity Catalog using SQL"""
     with conn.cursor() as cursor:
         if not df.empty:
-            # Replace NaN values with None for proper SQL NULL handling
-            df_clean = df.where(pd.notnull(df), None)
+            # Fill NaN values with empty strings or zeros
+            df_filled = df.fillna({
+                col: "" if df[col].dtype == 'object' else 0 
+                for col in df.columns
+            })
             
-            def format_value(val):
-                """Format value for SQL insertion"""
-                if val is None:
-                    return "NULL"
-                elif isinstance(val, str):
-                    # Escape single quotes in strings
-                    return f"'{val.replace(chr(39), chr(39)+chr(39))}'"
-                elif isinstance(val, (int, float)):
-                    return str(val)
-                elif isinstance(val, (datetime, pd.Timestamp)):
-                    return f"'{val}'"
-                else:
-                    return f"'{str(val)}'"
-            
-            # Format rows for SQL
-            formatted_rows = []
-            for _, row in df_clean.iterrows():
-                formatted_values = [format_value(val) for val in row]
-                formatted_rows.append(f"({','.join(formatted_values)})")
-            
-            values = ",".join(formatted_rows)
+            rows = list(df_filled.itertuples(index=False))
+            values = ",".join([f"({','.join(map(repr, row))})" for row in rows])
             cursor.execute(f"CREATE OR REPLACE TABLE {table_name} AS VALUES {values}")
         else:
             st.error("No data to write")

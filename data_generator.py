@@ -154,7 +154,7 @@ def write_to_unity_catalog(table_name: str, df: pd.DataFrame, conn):
                 else:
                     return "STRING"
             
-            # Build column definitions with types
+            # Step 1: Create table with proper schema
             column_definitions = []
             for col_name, dtype in df.dtypes.items():
                 sql_type = get_sql_type(dtype)
@@ -162,23 +162,35 @@ def write_to_unity_catalog(table_name: str, df: pd.DataFrame, conn):
             
             columns_sql = ", ".join(column_definitions)
             
-            # Process rows
-            clean_rows = []
-            for _, row in df.iterrows():
-                clean_values = [clean_value(val) for val in row]
-                clean_rows.append(f"({','.join(clean_values)})")
-            
-            values = ",".join(clean_rows)
-            
-            # Create table with proper schema
-            sql_statement = f"""
+            create_table_sql = f"""
             CREATE OR REPLACE TABLE {table_name} (
                 {columns_sql}
-            ) AS VALUES {values}
+            ) USING DELTA
             """
             
-            st.write(f"**Creating table with columns:** {list(df.columns)}")
-            cursor.execute(sql_statement)
+            cursor.execute(create_table_sql)
+            
+            # Step 2: Insert data
+            if len(df) > 0:
+                # Get column names for INSERT
+                column_names = ", ".join([f"`{col}`" for col in df.columns])
+                
+                # Process rows
+                clean_rows = []
+                for _, row in df.iterrows():
+                    clean_values = [clean_value(val) for val in row]
+                    clean_rows.append(f"({','.join(clean_values)})")
+                
+                values = ",".join(clean_rows)
+                
+                insert_sql = f"""
+                INSERT INTO {table_name} ({column_names})
+                VALUES {values}
+                """
+                
+                cursor.execute(insert_sql)
+            
+            st.write(f"✅ Created table with columns: {list(df.columns)}")
 
 
 # Streamlit UI

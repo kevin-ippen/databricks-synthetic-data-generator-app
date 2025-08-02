@@ -3,8 +3,7 @@ import json
 from datetime import datetime, timedelta
 import random
 from faker import Faker
-from pyspark.sql import SparkSession
-from pyspark.sql.types import *
+import pandas as pd
 
 # Initialize Spark session and Faker
 try:
@@ -148,6 +147,35 @@ def generate_synthetic_data(spark, catalog, schema, table_name, columns, row_cou
     df.write.format("delta").mode(mode).saveAsTable(full_name)
     
     return full_name
+
+def generate_synthetic_dataframe(columns, row_count):
+    """Generate pandas DataFrame instead of Spark DataFrame"""
+    data = []
+    for i in range(row_count):
+        row = {}
+        for col in columns:
+            if col["type"] == "string":
+                row[col["name"]] = fake.word()
+            elif col["type"] == "integer":
+                row[col["name"]] = random.randint(0, 10000)
+            elif col["type"] == "float":
+                row[col["name"]] = round(random.uniform(0, 10000), 2)
+            elif col["type"] == "date":
+                row[col["name"]] = fake.date_between(start_date="-1y", end_date="today")
+            elif col["type"] == "timestamp":
+                row[col["name"]] = datetime.now() - timedelta(days=random.randint(0, 365))
+            else:
+                row[col["name"]] = fake.word()
+        data.append(row)
+    return pd.DataFrame(data)
+
+def write_to_unity_catalog(table_name: str, df: pd.DataFrame, conn):
+    """Write DataFrame to Unity Catalog using SQL"""
+    with conn.cursor() as cursor:
+        rows = list(df.itertuples(index=False))
+        values = ",".join([f"({','.join(map(repr, row))})" for row in rows])
+        cursor.execute(f"INSERT OVERWRITE {table_name} VALUES {values}")
+
 
 # Streamlit UI
 st.set_page_config(page_title="Enhanced Synthetic Data Generator", layout="wide")

@@ -88,8 +88,11 @@ def generate_realistic_data(col_config, fake):
         else:
             return random.choice(choices)
     elif col_type == "date":
-        start_date = col_config.get("start_date", "2020-01-01")
-        end_date = col_config.get("end_date", "2024-12-31")
+        start_date_str = col_config.get("start_date", "2020-01-01")
+        end_date_str = col_config.get("end_date", "2024-12-31")
+        # Convert string dates to datetime objects
+        start_date = datetime.strptime(start_date_str, "%Y-%m-%d").date()
+        end_date = datetime.strptime(end_date_str, "%Y-%m-%d").date()
         return fake.date_between(start_date=start_date, end_date=end_date)
     elif col_type == "timestamp":
         start_date = col_config.get("start_date", "2024-01-01")

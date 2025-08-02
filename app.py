@@ -43,11 +43,56 @@ def generate_synthetic_dataframe(columns, row_count):
     return pd.DataFrame(data)
 
 def write_to_unity_catalog(table_name: str, df: pd.DataFrame, conn):
-    """Write DataFrame to Unity Catalog using SQL"""
+    """Write DataFrame to Unity Catalog using SQL - creates table if it doesn't exist"""
     with conn.cursor() as cursor:
-        rows = list(df.itertuples(index=False))
-        values = ",".join([f"({','.join(map(repr, row))})" for row in rows])
-        cursor.execute(f"INSERT OVERWRITE {table_name} VALUES {values}")
+        try:
+            # First, create the table schema based on the DataFrame
+            column_definitions = []
+            for col_name, dtype in df.dtypes.items():
+                if pd.api.types.is_integer_dtype(dtype):
+                    sql_type = "BIGINT"
+                elif pd.api.types.is_float_dtype(dtype):
+                    sql_type = "DOUBLE"
+                elif pd.api.types.is_datetime64_any_dtype(dtype):
+                    sql_type = "TIMESTAMP"
+                else:
+                    sql_type = "STRING"
+                column_definitions.append(f"`{col_name}` {sql_type}")
+            
+            # Create table if it doesn't exist
+            create_table_sql = f"""
+            CREATE TABLE IF NOT EXISTS {table_name} (
+                {', '.join(column_definitions)}
+            ) USING DELTA
+            """
+            cursor.execute(create_table_sql)
+            
+            # Clear existing data (if any)
+            cursor.execute(f"DELETE FROM {table_name}")
+            
+            # Insert new data
+            if not df.empty:
+                rows = list(df.itertuples(index=False))
+                values = ",".join([f"({','.join(map(repr, row))})" for row in rows])
+                cursor.execute(f"INSERT INTO {table_name} VALUES {values}")
+                
+        except Exception as e:
+            # If table creation fails, try a simpler approach
+            st.warning(f"Table creation failed, trying alternative approach: {e}")
+            
+            # Alternative: Create table from the first row, then insert all data
+            if not df.empty:
+                first_row = df.iloc[0:1]
+                first_values = ",".join([f"({','.join(map(repr, row))})" for row in first_row.itertuples(index=False)])
+                
+                # Create table with first row
+                cursor.execute(f"CREATE OR REPLACE TABLE {table_name} AS VALUES {first_values}")
+                
+                # Insert remaining rows if there are any
+                if len(df) > 1:
+                    remaining_rows = df.iloc[1:]
+                    remaining_values = ",".join([f"({','.join(map(repr, row))})" for row in remaining_rows.itertuples(index=False)])
+                    cursor.execute(f"INSERT INTO {table_name} VALUES {remaining_values}")
 
 st.title("Synthetic Data Generator (SQL-based)")
 

@@ -4,10 +4,11 @@ from datetime import datetime, timedelta
 import random
 from faker import Faker
 import pandas as pd
+from databricks import sql
+from databricks.sdk.core import Config
 
 # Initialize Spark session and Faker
 try:
-    spark = SparkSession.builder.getOrCreate()
     fake = Faker()
 except Exception as e:
     st.error(f"Error initializing Spark: {e}")
@@ -103,69 +104,14 @@ def generate_realistic_data(col_config, fake):
     else:
         return fake.word()
 
-def generate_synthetic_data(spark, catalog, schema, table_name, columns, row_count=1000, mode="overwrite"):
-    """Generate synthetic data and write to Unity Catalog"""
-    
-    # Build Spark schema
-    fields = []
-    for col in columns:
-        col_type = col["type"]
-        
-        if col_type in ["string", "first_name", "last_name", "email", "phone", "address", "city", "state", "zipcode", "sentence", "text", "choice"]:
-            fields.append(StructField(col["name"], StringType(), True))
-        elif col_type == "integer":
-            fields.append(StructField(col["name"], IntegerType(), True))
-        elif col_type == "float":
-            fields.append(StructField(col["name"], DoubleType(), True))
-        elif col_type == "boolean":
-            fields.append(StructField(col["name"], BooleanType(), True))
-        elif col_type == "date":
-            fields.append(StructField(col["name"], DateType(), True))
-        elif col_type == "timestamp":
-            fields.append(StructField(col["name"], TimestampType(), True))
-        else:
-            fields.append(StructField(col["name"], StringType(), True))
-
-    schema_def = StructType(fields)
-
-    # Generate data
-    def row_gen(_):
-        row = []
-        for col in columns:
-            row.append(generate_realistic_data(col, fake))
-        return tuple(row)
-
-    rdd = spark.sparkContext.parallelize([row_gen(i) for i in range(row_count)])
-    df = spark.createDataFrame(rdd, schema_def)
-
-    # Ensure catalog and schema exist
-    spark.sql(f"CREATE CATALOG IF NOT EXISTS {catalog}")
-    spark.sql(f"CREATE SCHEMA IF NOT EXISTS {catalog}.{schema}")
-
-    # Write to table
-    full_name = f"{catalog}.{schema}.{table_name}"
-    df.write.format("delta").mode(mode).saveAsTable(full_name)
-    
-    return full_name
-
-def generate_synthetic_dataframe(columns, row_count):
-    """Generate pandas DataFrame instead of Spark DataFrame"""
+def generate_synthetic_dataframe_advanced(columns, row_count):
+    """Generate pandas DataFrame using advanced template configurations"""
     data = []
     for i in range(row_count):
         row = {}
         for col in columns:
-            if col["type"] == "string":
-                row[col["name"]] = fake.word()
-            elif col["type"] == "integer":
-                row[col["name"]] = random.randint(0, 10000)
-            elif col["type"] == "float":
-                row[col["name"]] = round(random.uniform(0, 10000), 2)
-            elif col["type"] == "date":
-                row[col["name"]] = fake.date_between(start_date="-1y", end_date="today")
-            elif col["type"] == "timestamp":
-                row[col["name"]] = datetime.now() - timedelta(days=random.randint(0, 365))
-            else:
-                row[col["name"]] = fake.word()
+            # Use the advanced generate_realistic_data function
+            row[col["name"]] = generate_realistic_data(col, fake)
         data.append(row)
     return pd.DataFrame(data)
 
@@ -281,23 +227,42 @@ if st.session_state.columns:
     col1_gen, col2_gen = st.columns(2)
     
     with col1_gen:
+        # Add SQL warehouse input BEFORE the button
+        http_path = st.text_input(
+            "SQL Warehouse HTTP Path:", 
+            placeholder="/sql/1.0/warehouses/862f1d757f0424f7",
+            help="Get this from your SQL Warehouse details page"
+        )
+
         if st.button("🎲 Generate Synthetic Data", type="primary"):
-            try:
-                with st.spinner("Generating synthetic data..."):
-                    result = generate_synthetic_data(
-                        spark=spark,
-                        catalog=catalog,
-                        schema=schema,
-                        table_name=table_name,
-                        columns=st.session_state.columns,
-                        row_count=int(row_count),
-                        mode=write_mode
-                    )
-                st.success(f"✅ Synthetic data written to: **{result}**")
-                st.balloons()
-            except Exception as e:
-                st.error(f"❌ Error generating data: {str(e)}")
-    
+            if not http_path:
+                st.error("Please provide SQL Warehouse HTTP Path")
+            else:
+                try:
+                    from databricks import sql
+                    from databricks.sdk.core import Config
+                    
+                    cfg = Config()
+                    
+                    with st.spinner("Generating synthetic data..."):
+                        # Connect to SQL warehouse
+                        conn = sql.connect(
+                            server_hostname=cfg.host,
+                            http_path=http_path,
+                            credentials_provider=lambda: cfg.authenticate,
+                        )
+                        
+                        # Generate data using the advanced function
+                        df = generate_synthetic_dataframe_advanced(st.session_state.columns, int(row_count))
+                        
+                        # Write to Unity Catalog
+                        full_table_name = f"{catalog}.{schema}.{table_name}"
+                        write_to_unity_catalog(full_table_name, df, conn)
+                        
+                    st.success(f"✅ Synthetic data written to: **{full_table_name}**")
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"❌ Error generating data: {str(e)}")
     with col2_gen:
         if st.button("👀 Preview Schema"):
             st.json({

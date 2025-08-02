@@ -116,20 +116,69 @@ def generate_synthetic_dataframe_advanced(columns, row_count):
     return pd.DataFrame(data)
 
 def write_to_unity_catalog(table_name: str, df: pd.DataFrame, conn):
-    """Write DataFrame to Unity Catalog using SQL"""
+    """Write DataFrame to Unity Catalog with proper column names and types"""
+    import math
+    
     with conn.cursor() as cursor:
         if not df.empty:
-            # Fill NaN values with empty strings or zeros
-            df_filled = df.fillna({
-                col: "" if df[col].dtype == 'object' else 0 
-                for col in df.columns
-            })
+            def clean_value(val):
+                """Convert any problematic value to a clean SQL value"""
+                if val is None or pd.isna(val):
+                    return "NULL"
+                elif isinstance(val, float) and math.isnan(val):
+                    return "NULL"
+                elif str(val).lower() in ['nan', 'nat', 'none', '']:
+                    return "NULL"
+                elif isinstance(val, str):
+                    if val.strip() == '':
+                        return "NULL"
+                    escaped = val.replace("'", "''")
+                    return f"'{escaped}'"
+                elif isinstance(val, (int, float)):
+                    return str(val)
+                elif isinstance(val, (datetime, pd.Timestamp)):
+                    return f"'{val}'"
+                else:
+                    return f"'{str(val)}'"
             
-            rows = list(df_filled.itertuples(index=False))
-            values = ",".join([f"({','.join(map(repr, row))})" for row in rows])
-            cursor.execute(f"CREATE OR REPLACE TABLE {table_name} AS VALUES {values}")
-        else:
-            st.error("No data to write")
+            def get_sql_type(dtype):
+                """Convert pandas dtype to SQL type"""
+                if pd.api.types.is_integer_dtype(dtype):
+                    return "BIGINT"
+                elif pd.api.types.is_float_dtype(dtype):
+                    return "DOUBLE"
+                elif pd.api.types.is_datetime64_any_dtype(dtype):
+                    return "TIMESTAMP"
+                elif pd.api.types.is_bool_dtype(dtype):
+                    return "BOOLEAN"
+                else:
+                    return "STRING"
+            
+            # Build column definitions with types
+            column_definitions = []
+            for col_name, dtype in df.dtypes.items():
+                sql_type = get_sql_type(dtype)
+                column_definitions.append(f"`{col_name}` {sql_type}")
+            
+            columns_sql = ", ".join(column_definitions)
+            
+            # Process rows
+            clean_rows = []
+            for _, row in df.iterrows():
+                clean_values = [clean_value(val) for val in row]
+                clean_rows.append(f"({','.join(clean_values)})")
+            
+            values = ",".join(clean_rows)
+            
+            # Create table with proper schema
+            sql_statement = f"""
+            CREATE OR REPLACE TABLE {table_name} (
+                {columns_sql}
+            ) AS VALUES {values}
+            """
+            
+            st.write(f"**Creating table with columns:** {list(df.columns)}")
+            cursor.execute(sql_statement)
 
 
 # Streamlit UI

@@ -224,6 +224,16 @@ def generate_realistic_data(col_config, fake):
     else:
         return fake_local.word()
 
+def generate_advanced_dataframe(columns, row_count):
+    """Generate DataFrame using advanced template configurations"""
+    data = []
+    for i in range(row_count):
+        row = {}
+        for col in columns:
+            row[col["name"]] = generate_realistic_data(col, fake)
+        data.append(row)
+    return pd.DataFrame(data)
+
 def write_to_unity_catalog(table_name: str, df: pd.DataFrame, conn):
     """Write DataFrame to Unity Catalog with proper column names and types"""
     import math
